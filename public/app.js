@@ -16,6 +16,7 @@ const state = {
   sketches: [newSketch()],
   active: 0,
   searching: null, // AbortController while a search is in flight
+  mode: null, // "server" (Inkling server holds the key) or "browser" (user's own key, e.g. on GitHub Pages)
 };
 
 function newSketch() {
@@ -252,6 +253,11 @@ async function submit() {
     showError("Draw something or describe what you're looking for first.");
     return;
   }
+  await modeReady;
+  if (state.mode === "browser" && !getApiKey()) {
+    openSettings("Add your Anthropic API key to start searching.");
+    return;
+  }
 
   const controller = new AbortController();
   state.searching = controller;
@@ -259,23 +265,137 @@ async function submit() {
   showLoading(controller, sketches.length, Boolean(text));
 
   try {
-    const res = await fetch("api/search", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ text, sketches }),
-      signal: controller.signal,
-    });
-    const data = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
-    if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
+    const data =
+      state.mode === "server"
+        ? await searchViaServer({ text, sketches }, controller.signal)
+        : await searchInBrowser({ text, sketches }, controller.signal);
     renderResults(data, sketches);
   } catch (err) {
-    if (err.name === "AbortError") showError("Search cancelled.");
-    else showError(err.message);
+    if (err.name === "AbortError" || controller.signal.aborted) showError("Search cancelled.");
+    else showError(describeError(err));
   } finally {
     state.searching = null;
     $("submitBtn").disabled = false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Search transports: an Inkling server, or straight from the browser
+// ---------------------------------------------------------------------------
+
+const KEY_STORAGE = "inkling.apiKey";
+
+async function detectMode() {
+  try {
+    const res = await fetch("api/status", { headers: { accept: "application/json" } });
+    const status = res.ok ? await res.json() : null;
+    state.mode = status?.configured ? "server" : "browser";
+  } catch {
+    state.mode = "browser"; // static hosting (e.g. GitHub Pages) has no API
+  }
+  document.body.dataset.mode = state.mode;
+}
+
+function getApiKey() {
+  for (const store of [sessionStorage, localStorage]) {
+    try {
+      const key = store.getItem(KEY_STORAGE);
+      if (key) return key;
+    } catch {}
+  }
+  return memoryKey;
+}
+
+function setApiKey(key, remember) {
+  for (const store of [sessionStorage, localStorage]) {
+    try {
+      store.removeItem(KEY_STORAGE);
+    } catch {}
+  }
+  if (!key) return;
+  try {
+    (remember ? localStorage : sessionStorage).setItem(KEY_STORAGE, key);
+  } catch {
+    memoryKey = key;
+  }
+}
+let memoryKey = "";
+
+async function searchViaServer(body, signal) {
+  const res = await fetch("api/search", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const data = await res.json().catch(() => ({ error: `Server error (${res.status})` }));
+  if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
+  return data;
+}
+
+let browserClient;
+async function searchInBrowser(body, signal) {
+  const [{ Anthropic }, core] = await Promise.all([import("./vendor/anthropic-sdk.js"), import("./search-core.js")]);
+  const apiKey = getApiKey();
+  if (!browserClient || browserClient.apiKey !== apiKey) {
+    browserClient = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  }
+  return core.searchWithClient(browserClient, core.parseSearchRequest(body), { signal });
+}
+
+function describeError(err) {
+  const status = err?.status;
+  if (status === 401) {
+    if (state.mode === "browser") openSettings("That API key was rejected. Check it and try again.");
+    return "Your Anthropic API key was rejected.";
+  }
+  if (status === 429) return "Rate limited — wait a moment and try again.";
+  if (status === 400 && /credit|billing/i.test(err.message)) return "Your Anthropic account is out of credit.";
+  if (status && status >= 500) return "The search service is having trouble. Try again shortly.";
+  if (err instanceof TypeError && state.mode === "browser") return "Couldn't reach the search service. Check your connection.";
+  return err?.message || "Something went wrong.";
+}
+
+// ---------------------------------------------------------------------------
+// Settings dialog
+// ---------------------------------------------------------------------------
+
+const dialog = $("settingsDialog");
+
+function openSettings(message) {
+  const serverMode = state.mode === "server";
+  $("serverModeNote").hidden = !serverMode;
+  $("keyModeFields").hidden = serverMode;
+  $("forgetKeyBtn").hidden = serverMode || !getApiKey();
+  $("saveSettingsBtn").textContent = serverMode ? "Done" : "Save";
+  $("apiKeyInput").value = getApiKey();
+  let note = dialog.querySelector(".dialog-message");
+  if (!note) {
+    note = el("p", { className: "dialog-message" });
+    $("settingsTitle").after(note);
+  }
+  note.textContent = message || "";
+  note.hidden = !message;
+  dialog.showModal();
+  if (!serverMode) $("apiKeyInput").focus();
+}
+
+$("settingsBtn").addEventListener("click", async () => {
+  await modeReady;
+  openSettings();
+});
+$("cancelSettingsBtn").addEventListener("click", () => dialog.close());
+$("forgetKeyBtn").addEventListener("click", () => {
+  setApiKey("");
+  memoryKey = "";
+  browserClient = null;
+  dialog.close();
+});
+$("settingsForm").addEventListener("submit", () => {
+  if (state.mode === "server") return;
+  setApiKey($("apiKeyInput").value.trim(), $("rememberKey").checked);
+  browserClient = null;
+});
 
 const resultsEl = $("results");
 
@@ -351,7 +471,7 @@ function renderResults(data, sketches) {
     } else {
       thumb.classList.add("no-image");
     }
-    thumb.append(el("img", { className: "thumb-fallback", src: "logo.svg", alt: "" }));
+    thumb.append(el("img", { className: "thumb-fallback", src: "public/logo.svg", alt: "" }));
 
     return el(
       "article",
@@ -415,9 +535,4 @@ function renderResults(data, sketches) {
 setTool("pen");
 selectSketch(0);
 
-fetch("api/status")
-  .then((r) => r.json())
-  .then((s) => {
-    if (!s.configured) showError("The server isn't configured yet: set ANTHROPIC_API_KEY in .env and restart.");
-  })
-  .catch(() => {});
+const modeReady = detectMode();

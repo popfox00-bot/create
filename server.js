@@ -25,7 +25,7 @@ app.use((req, res, next) => {
     "Referrer-Policy": "no-referrer",
     "X-Content-Type-Options": "nosniff",
     "Content-Security-Policy":
-      "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+      "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' https://api.anthropic.com; frame-ancestors 'none'",
   });
   next();
 });
@@ -43,7 +43,9 @@ if (process.env.APP_PASSWORD) {
 }
 
 app.use(express.json({ limit: "15mb" }));
-app.use(express.static(join(__dirname, "public")));
+// Only index.html and public/ are served — never the repo root (server code, .env).
+app.get("/", (req, res) => res.sendFile(join(__dirname, "index.html")));
+app.use("/public", express.static(join(__dirname, "public")));
 
 app.get("/api/status", (req, res) => {
   res.json({ configured: isConfigured() });

@@ -6,17 +6,44 @@
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#1b2340">
   <title>Inkling — sketch it, search it</title>
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="public/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="public/styles.css">
 </head>
 <body>
   <header class="site-header">
     <a class="brand" href="./" aria-label="Inkling home">
-      <img src="logo.svg" alt="" width="44" height="44">
+      <img src="public/logo.svg" alt="" width="44" height="44">
       <span class="wordmark">Inkling</span>
     </a>
     <p class="tagline">Sketch it. Describe it. Find it.</p>
+    <button class="settings-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
   </header>
+
+  <dialog class="settings" id="settingsDialog" aria-labelledby="settingsTitle">
+    <form method="dialog" id="settingsForm">
+      <h2 id="settingsTitle">Inkling settings</h2>
+      <div id="serverModeNote" hidden>
+        <p>Searches run through this Inkling server, so you don't need a key here.</p>
+      </div>
+      <div id="keyModeFields">
+        <p>This copy of Inkling runs entirely in your browser. To search, it needs your own
+          <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer">Anthropic API key</a>.</p>
+        <label for="apiKeyInput">Anthropic API key</label>
+        <input id="apiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-...">
+        <label class="checkbox"><input type="checkbox" id="rememberKey" checked> Remember on this device</label>
+        <p class="fine-print">The key is saved only in this browser and is sent only to <code>api.anthropic.com</code>.
+          Anyone who uses this browser could use it, so set a monthly spend limit in the Anthropic Console.</p>
+      </div>
+      <div class="dialog-actions">
+        <button type="button" class="ghost" id="forgetKeyBtn">Forget key</button>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="cancelSettingsBtn">Cancel</button>
+        <button type="submit" class="primary" id="saveSettingsBtn" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
 
   <main>
     <section class="composer" aria-label="Describe your search">
@@ -71,7 +98,7 @@
       <div class="submit-row">
         <span class="summary" id="summary"></span>
         <button class="submit" id="submitBtn">
-          <img src="logo.svg" alt="" width="22" height="22">
+          <img src="public/logo.svg" alt="" width="22" height="22">
           Search with Inkling
         </button>
       </div>
@@ -82,9 +109,9 @@
   </main>
 
   <footer class="site-footer">
-    <span>Inkling · private freeform search · your sketches go only to this server and its search model.</span>
+    <span>Inkling · private freeform search · no accounts, no tracking — your sketches go only to the search model.</span>
   </footer>
 
-  <script type="module" src="app.js"></script>
+  <script type="module" src="public/app.js"></script>
 </body>
 </html>
