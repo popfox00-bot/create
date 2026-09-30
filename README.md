@@ -19,7 +19,7 @@ Inkling is a private, freeform alternative to a keyword search box. You describe
 
 ## Two ways to run it
 
-### 1. GitHub Pages (no server): https://popfox00-bot.github.io/create/
+### 1. GitHub Pages (no server): https://popfox00-bot.github.io/inkling/
 
 Open the site, tap the ⚙ settings button, and paste your own [Anthropic API key](https://console.anthropic.com/settings/keys). Searches then run directly from your browser to `api.anthropic.com`.
 
